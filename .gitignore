@@ -1,0 +1,4 @@
+envcheck
+/dist/
+*.out
+.env
