@@ -16,16 +16,16 @@ func main() {
 
 	result, err := checker.Check(*template, *actual)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "envcheck:", err)
+		fmt.Fprintf(os.Stderr, "envcheck: could not read env files: %v\n", err)
 		os.Exit(2)
 	}
 
 	if len(result.Missing) == 0 {
-		fmt.Println("all required keys present")
+		fmt.Printf("%s has all keys from %s\n", *actual, *template)
 		return
 	}
 
-	fmt.Printf("missing keys in %s:\n", *actual)
+	fmt.Printf("%s is missing %d key(s) defined in %s:\n", *actual, len(result.Missing), *template)
 	for _, k := range result.Missing {
 		fmt.Printf("  - %s\n", k)
 	}
