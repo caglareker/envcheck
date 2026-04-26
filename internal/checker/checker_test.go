@@ -48,6 +48,23 @@ func TestCheck_IgnoresComments(t *testing.T) {
 	}
 }
 
+func TestCheck_ReportsExtraKeys(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env.example", "DB_HOST=\nDB_PORT=\n")
+	writeFile(t, dir, ".env", "DB_HOST=localhost\nDB_PORT=5432\nLEGACY_KEY=x\nUNUSED=y\n")
+
+	r, err := Check(filepath.Join(dir, ".env.example"), filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Missing) != 0 {
+		t.Errorf("expected no missing, got %v", r.Missing)
+	}
+	if len(r.Extra) != 2 {
+		t.Errorf("expected 2 extra, got %v", r.Extra)
+	}
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
