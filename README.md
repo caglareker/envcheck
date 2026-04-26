@@ -14,10 +14,35 @@ go install github.com/caglareker/envcheck@latest
 envcheck --template .env.example --actual .env
 ```
 
-Exit code is 0 by default, even when keys are missing. Use `--ci` to make it fail:
+### Flags
+
+| Flag         | Default        | Purpose                                                                       |
+|--------------|----------------|-------------------------------------------------------------------------------|
+| `--template` | `.env.example` | Template file listing required keys                                           |
+| `--actual`   | `.env`         | Env file to check                                                             |
+| `--ci`       | `false`        | Exit non-zero when keys are missing (or, with `--strict`, when extras exist)  |
+| `--strict`   | `false`        | Also report keys present in `--actual` but not in `--template`                |
+
+### Exit codes
+
+| Code | Meaning                                                                       |
+|------|-------------------------------------------------------------------------------|
+| `0`  | Success — or missing/extra keys found but `--ci` is off                       |
+| `1`  | `--ci` and missing keys (always), or `--ci --strict` and extra keys           |
+| `2`  | Could not read one of the env files (e.g. file not found, permission denied)  |
+
+### Examples
+
+Fail CI when keys are missing:
 
 ```
 envcheck --ci
+```
+
+Also flag stale keys in `.env` that are no longer in the template:
+
+```
+envcheck --strict --ci
 ```
 
 ## Why
