@@ -4,8 +4,20 @@ Small CLI to check that a `.env` file has all the keys listed in a `.env.example
 
 ## Install
 
+**With Go:**
+
 ```
 go install github.com/caglareker/envcheck@latest
+```
+
+**Pre-built binary:** download the archive for your platform from
+[Releases](https://github.com/caglareker/envcheck/releases), extract, and put
+the `envcheck` binary on your `$PATH`.
+
+Check the version:
+
+```
+envcheck --version
 ```
 
 ## Usage

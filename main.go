@@ -8,6 +8,13 @@ import (
 	"github.com/caglareker/envcheck/internal/checker"
 )
 
+// Build-time variables injected via -ldflags by goreleaser.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	template := flag.String("template", ".env.example", "template env file with required keys")
 	actual := flag.String("actual", ".env", "actual env file to check")
@@ -16,7 +23,13 @@ func main() {
 	requireValues := flag.Bool("require-values", false, "fail when a required key is present but empty in actual")
 	scan := flag.String("scan", "", "scan a source directory for env key usage and flag keys missing from the template")
 	format := flag.String("format", "text", "output format: text|github")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("envcheck %s (commit %s, built %s)\n", version, commit, date)
+		return
+	}
 
 	opts := checker.Options{
 		RequireValues: *requireValues,
