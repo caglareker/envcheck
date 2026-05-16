@@ -155,6 +155,35 @@ func TestCheck_StripsInlineComment(t *testing.T) {
 	}
 }
 
+func TestCheck_ScanFindsUndeclared(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env.example", "DB_HOST=\n")
+	writeFile(t, dir, ".env", "DB_HOST=localhost\n")
+	srcDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, srcDir, "main.go", `package main
+import "os"
+var _ = os.Getenv("DB_HOST")
+var _ = os.Getenv("STRIPE_KEY")
+`)
+	r, err := Check(
+		filepath.Join(dir, ".env.example"),
+		filepath.Join(dir, ".env"),
+		Options{ScanPath: srcDir},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Undeclared) != 1 || r.Undeclared[0].Key != "STRIPE_KEY" {
+		t.Fatalf("expected STRIPE_KEY undeclared, got %+v", r.Undeclared)
+	}
+	if len(r.Undeclared[0].CallSites) == 0 {
+		t.Errorf("expected call sites to be populated")
+	}
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {

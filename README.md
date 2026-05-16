@@ -23,6 +23,7 @@ envcheck --template .env.example --actual .env
 | `--ci`             | `false`        | Exit non-zero when any problem is detected                                    |
 | `--strict`         | `false`        | Also report keys present in `--actual` but not in `--template`                |
 | `--require-values` | `false`        | Fail when a required key is present but empty in `--actual` (e.g. `API_KEY=`) |
+| `--scan`           | _(off)_        | Scan a source directory for env-var usage and flag keys missing from template |
 | `--format`         | `text`         | Output format: `text` (human readable) or `github` (Actions annotations)      |
 
 ### Exit codes
@@ -30,7 +31,7 @@ envcheck --template .env.example --actual .env
 | Code | Meaning                                                                       |
 |------|-------------------------------------------------------------------------------|
 | `0`  | Success — or problems found but `--ci` is off                                 |
-| `1`  | `--ci` and at least one of: missing keys, empty required values, extra keys   |
+| `1`  | `--ci` and at least one of: missing keys, empty required values, extra keys, undeclared scan hits |
 | `2`  | Could not read one of the env files (e.g. file not found, permission denied)  |
 
 ### Parser notes
@@ -66,6 +67,31 @@ Emit GitHub Actions annotations so missing keys show up inline on PRs:
 ```
 envcheck --ci --format=github
 ```
+
+Catch env vars used in code but forgotten in `.env.example`:
+
+```
+envcheck --scan ./src --ci
+```
+
+### Scan mode
+
+`--scan <dir>` walks the given directory and looks for env-var references in
+source files. Anything used in code but not declared in the template is
+reported as **undeclared**, with the file + line number of each call site.
+
+Supported languages:
+
+| Extension              | Detected patterns                                              |
+|------------------------|----------------------------------------------------------------|
+| `.go`                  | `os.Getenv("X")`, `os.LookupEnv("X")`                          |
+| `.js` `.jsx` `.ts` `.tsx` `.mjs` `.cjs` | `process.env.X`, `process.env["X"]`, `import.meta.env.X`, `Deno.env.get("X")` |
+| `.py`                  | `os.environ["X"]`, `os.environ.get("X")`, `os.getenv("X")`     |
+| `.rb`                  | `ENV["X"]`, `ENV.fetch("X")`                                   |
+| `.rs`                  | `env::var("X")`, `env::var_os("X")`                            |
+| `.php`                 | `getenv("X")`, `$_ENV["X"]`                                    |
+
+Skipped directories: `.git`, `node_modules`, `vendor`, `target`, `dist`, `build`, `.next`, `.nuxt`, `__pycache__`, `.venv`, `venv`, `.tox`.
 
 ## Why
 

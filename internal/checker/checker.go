@@ -3,7 +3,10 @@ package checker
 import (
 	"bufio"
 	"os"
+	"sort"
 	"strings"
+
+	"github.com/caglareker/envcheck/internal/scanner"
 )
 
 type Entry struct {
@@ -12,13 +15,21 @@ type Entry struct {
 }
 
 type Result struct {
-	Missing []string
-	Extra   []string
-	Empty   []string
+	Missing    []string
+	Extra      []string
+	Empty      []string
+	Undeclared []UndeclaredKey
+}
+
+// UndeclaredKey is a key referenced in source code but missing from the template.
+type UndeclaredKey struct {
+	Key       string
+	CallSites []string
 }
 
 type Options struct {
 	RequireValues bool
+	ScanPath      string
 }
 
 func Check(templatePath, actualPath string, opts Options) (*Result, error) {
@@ -55,6 +66,24 @@ func Check(templatePath, actualPath string, opts Options) (*Result, error) {
 			if actualVal == "" {
 				r.Empty = append(r.Empty, e.Key)
 			}
+		}
+	}
+
+	if opts.ScanPath != "" {
+		sr, err := scanner.Scan(opts.ScanPath)
+		if err != nil {
+			return nil, err
+		}
+		var keys []string
+		for k := range sr.UsedKeys {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if _, ok := requiredMap[k]; ok {
+				continue
+			}
+			r.Undeclared = append(r.Undeclared, UndeclaredKey{Key: k, CallSites: sr.UsedKeys[k]})
 		}
 	}
 
