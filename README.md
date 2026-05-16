@@ -16,20 +16,30 @@ envcheck --template .env.example --actual .env
 
 ### Flags
 
-| Flag         | Default        | Purpose                                                                       |
-|--------------|----------------|-------------------------------------------------------------------------------|
-| `--template` | `.env.example` | Template file listing required keys                                           |
-| `--actual`   | `.env`         | Env file to check                                                             |
-| `--ci`       | `false`        | Exit non-zero when keys are missing (or, with `--strict`, when extras exist)  |
-| `--strict`   | `false`        | Also report keys present in `--actual` but not in `--template`                |
+| Flag               | Default        | Purpose                                                                       |
+|--------------------|----------------|-------------------------------------------------------------------------------|
+| `--template`       | `.env.example` | Template file listing required keys                                           |
+| `--actual`         | `.env`         | Env file to check                                                             |
+| `--ci`             | `false`        | Exit non-zero when any problem is detected                                    |
+| `--strict`         | `false`        | Also report keys present in `--actual` but not in `--template`                |
+| `--require-values` | `false`        | Fail when a required key is present but empty in `--actual` (e.g. `API_KEY=`) |
+| `--format`         | `text`         | Output format: `text` (human readable) or `github` (Actions annotations)      |
 
 ### Exit codes
 
 | Code | Meaning                                                                       |
 |------|-------------------------------------------------------------------------------|
-| `0`  | Success — or missing/extra keys found but `--ci` is off                       |
-| `1`  | `--ci` and missing keys (always), or `--ci --strict` and extra keys           |
+| `0`  | Success — or problems found but `--ci` is off                                 |
+| `1`  | `--ci` and at least one of: missing keys, empty required values, extra keys   |
 | `2`  | Could not read one of the env files (e.g. file not found, permission denied)  |
+
+### Parser notes
+
+- Lines starting with `#` are treated as comments and ignored.
+- Inline comments after a value (`PORT=5432 # the port`) are stripped.
+- `export FOO=bar` is supported.
+- Quoted values (`KEY="value with spaces"`, `KEY='single'`) are unwrapped.
+- `KEY=""` is considered empty for `--require-values`.
 
 ### Examples
 
@@ -43,6 +53,18 @@ Also flag stale keys in `.env` that are no longer in the template:
 
 ```
 envcheck --strict --ci
+```
+
+Fail when a required key was added but left blank (the classic "I forgot to set it in CI" bug):
+
+```
+envcheck --require-values --ci
+```
+
+Emit GitHub Actions annotations so missing keys show up inline on PRs:
+
+```
+envcheck --ci --format=github
 ```
 
 ## Why
