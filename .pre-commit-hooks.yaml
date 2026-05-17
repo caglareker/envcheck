@@ -1,0 +1,8 @@
+- id: envcheck
+  name: envcheck
+  description: Check that .env has all keys from .env.example
+  entry: envcheck
+  args: [--ci]
+  language: golang
+  pass_filenames: false
+  files: '(^|/)\.env(\..+)?$'

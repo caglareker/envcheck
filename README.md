@@ -105,6 +105,36 @@ Supported languages:
 
 Skipped directories: `.git`, `node_modules`, `vendor`, `target`, `dist`, `build`, `.next`, `.nuxt`, `__pycache__`, `.venv`, `venv`, `.tox`.
 
+## Pre-commit hook
+
+envcheck ships a [pre-commit](https://pre-commit.com) hook definition. Add it
+to your `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/caglareker/envcheck
+    rev: v0.1.0
+    hooks:
+      - id: envcheck
+```
+
+The hook runs `envcheck --ci` whenever a `.env*` file changes, so commits that
+introduce or break env declarations fail locally instead of in CI.
+
+Enable additional checks via `args`:
+
+```yaml
+- id: envcheck
+  args: [--ci, --strict, --require-values]
+```
+
+Scan source code for undeclared env vars:
+
+```yaml
+- id: envcheck
+  args: [--ci, --scan, ./src]
+```
+
 ## Why
 
 Got tired of deploys failing at runtime because someone forgot to add a new env var to the pipeline. Wanted something simpler than a shell script.
