@@ -29,8 +29,9 @@ jobs:
       - name: go build
         run: go build ./...
 
-      - name: upload coverage to codecov
-        uses: codecov/codecov-action@v4
+      - name: upload coverage to coveralls
+        uses: coverallsapp/github-action@v2
         with:
-          files: coverage.out
-          fail_ci_if_error: false
+          file: coverage.out
+          format: golang
+          fail-on-error: false
