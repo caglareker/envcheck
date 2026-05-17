@@ -4,6 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/caglareker/envcheck?sort=semver)](https://github.com/caglareker/envcheck/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/caglareker/envcheck.svg)](https://pkg.go.dev/github.com/caglareker/envcheck)
 [![Go Report Card](https://goreportcard.com/badge/github.com/caglareker/envcheck)](https://goreportcard.com/report/github.com/caglareker/envcheck)
+[![Coverage Status](https://coveralls.io/repos/github/caglareker/envcheck/badge.svg?branch=main)](https://coveralls.io/github/caglareker/envcheck?branch=main)
 [![License: MIT](https://img.shields.io/github/license/caglareker/envcheck)](LICENSE)
 
 Tiny Go CLI that catches missing or empty `.env` keys **before** they break your deploy. Compares `.env` against `.env.example`, validates required values, scans source code (Go, JS/TS, Python, Ruby, Rust, PHP) for env vars referenced in code but missing from your template, and emits GitHub Actions annotations on failure. Drop it into CI or a [pre-commit hook](#pre-commit-hook) — one static binary, no dependencies.

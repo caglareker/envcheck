@@ -24,7 +24,14 @@ jobs:
         run: go vet ./...
 
       - name: go test
-        run: go test -race -v ./...
+        run: go test -race -v -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: go build
         run: go build ./...
+
+      - name: upload coverage to coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          file: coverage.out
+          format: golang
+          fail-on-error: false
