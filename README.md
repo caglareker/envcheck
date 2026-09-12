@@ -43,6 +43,7 @@ envcheck --template .env.example --actual .env
 | `--strict`         | `false`        | Also report keys present in `--actual` but not in `--template`                |
 | `--require-values` | `false`        | Fail when a required key is present but empty in `--actual` (e.g. `API_KEY=`) |
 | `--scan`           | _(off)_        | Scan a source directory for env-var usage and flag keys missing from template |
+| `--ignore`         | _(none)_       | Skip keys matching these glob patterns in every check; comma-separated, repeatable |
 | `--format`         | `text`         | Output format: `text` (human readable) or `github` (Actions annotations)      |
 
 ### Exit codes
@@ -93,6 +94,12 @@ Catch env vars used in code but forgotten in `.env.example`:
 envcheck --scan ./src --ci
 ```
 
+Skip keys you never want reported — system variables, vendor prefixes, stale local-only keys:
+
+```
+envcheck --scan ./src --ci --ignore 'PATH,HOME,NODE_ENV' --ignore 'AWS_*'
+```
+
 ### Scan mode
 
 `--scan <dir>` walks the given directory and looks for env-var references in
@@ -111,6 +118,42 @@ Supported languages:
 | `.php`                 | `getenv("X")`, `$_ENV["X"]`                                    |
 
 Skipped directories: `.git`, `node_modules`, `vendor`, `target`, `dist`, `build`, `.next`, `.nuxt`, `__pycache__`, `.venv`, `venv`, `.tox`.
+
+### Ignoring keys
+
+`--ignore` takes glob patterns and drops matching keys from **every** check —
+missing, empty, extra and undeclared alike. It is comma-separated and
+repeatable, so these two are equivalent:
+
+```
+envcheck --ignore PATH,HOME,NODE_ENV
+envcheck --ignore PATH --ignore HOME --ignore NODE_ENV
+```
+
+Patterns use [`path.Match`](https://pkg.go.dev/path#Match) syntax — `*` matches
+any run of characters, `?` matches exactly one — and are case-sensitive:
+
+| Pattern    | Matches                                     |
+|------------|---------------------------------------------|
+| `PATH`     | exactly `PATH`                              |
+| `AWS_*`    | `AWS_REGION`, `AWS_SECRET_ACCESS_KEY`, …    |
+| `*_SECRET` | `DB_SECRET`, `APP_SECRET`, …                |
+| `VITE_?`   | `VITE_A`, but not `VITE_API`                |
+
+Nothing is dropped silently: when a key is actually suppressed, the text output
+says so (`ignored 3 key(s) via --ignore`). A malformed pattern exits `2` instead
+of quietly matching nothing.
+
+There is **no built-in ignore list**, on purpose. A validation tool that skips
+keys you never asked it to skip is hard to trust, and "system variable" means
+different things in different projects — `NODE_ENV`, `PORT` and `CI` are real
+application config in plenty of them. Scan mode is where you will want this
+most; a reasonable starting point to copy:
+
+```
+envcheck --scan ./src --ci \
+  --ignore 'PATH,HOME,USER,SHELL,LANG,PWD,TMPDIR,CI,NODE_ENV'
+```
 
 ## Pre-commit hook
 
@@ -140,6 +183,13 @@ Scan source code for undeclared env vars:
 ```yaml
 - id: envcheck
   args: [--ci, --scan, ./src]
+```
+
+Silence keys that are not yours to declare:
+
+```yaml
+- id: envcheck
+  args: [--ci, --scan, ./src, --ignore, 'PATH,HOME,NODE_ENV,AWS_*']
 ```
 
 ## Why

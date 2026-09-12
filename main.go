@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/caglareker/envcheck/internal/checker"
 )
@@ -15,6 +16,22 @@ var (
 	commit  = "none"
 	date    = "unknown"
 )
+
+// stringList is a repeatable, comma-splitting flag value.
+type stringList []string
+
+func (s *stringList) String() string { return strings.Join(*s, ",") }
+
+// Set appends the comma-separated entries in v, so the flag can be repeated
+// and/or given a list: --ignore A --ignore B,C
+func (s *stringList) Set(v string) error {
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			*s = append(*s, part)
+		}
+	}
+	return nil
+}
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -31,6 +48,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	scan := fs.String("scan", "", "scan a source directory for env key usage and flag keys missing from the template")
 	format := fs.String("format", "text", "output format: text|github")
 	showVersion := fs.Bool("version", false, "print version and exit")
+	var ignore stringList
+	fs.Var(&ignore, "ignore", "comma-separated glob patterns for keys to skip entirely; repeatable (e.g. PATH,AWS_*)")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -44,6 +63,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	opts := checker.Options{
 		RequireValues: *requireValues,
 		ScanPath:      *scan,
+		Ignore:        ignore,
 	}
 	result, err := checker.Check(*template, *actual, opts)
 	if err != nil {
@@ -76,6 +96,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func printText(w io.Writer, r *checker.Result, template, actual string, strict, requireValues bool, scanPath string) {
+	if len(r.Ignored) > 0 {
+		fmt.Fprintf(w, "ignored %d key(s) via --ignore\n", len(r.Ignored))
+	}
+
 	clean := len(r.Missing) == 0 &&
 		len(r.Undeclared) == 0 &&
 		!(requireValues && len(r.Empty) > 0) &&

@@ -3,6 +3,7 @@ package checker
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -181,6 +182,111 @@ var _ = os.Getenv("STRIPE_KEY")
 	}
 	if len(r.Undeclared[0].CallSites) == 0 {
 		t.Errorf("expected call sites to be populated")
+	}
+}
+
+func TestCheck_IgnoreSuppressesAllCategories(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env.example", "DB_HOST=\nLEGACY_TOKEN=\nEMPTY_ONE=\n")
+	writeFile(t, dir, ".env", "DB_HOST=localhost\nEMPTY_ONE=\nSTALE_KEY=y\n")
+	srcDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, srcDir, "main.go", `package main
+import "os"
+var _ = os.Getenv("SCANNED_KEY")
+`)
+
+	opts := Options{
+		RequireValues: true,
+		ScanPath:      srcDir,
+		Ignore:        []string{"LEGACY_TOKEN", "EMPTY_ONE", "STALE_KEY", "SCANNED_KEY"},
+	}
+	r, err := Check(filepath.Join(dir, ".env.example"), filepath.Join(dir, ".env"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Missing) != 0 {
+		t.Errorf("expected no missing, got %v", r.Missing)
+	}
+	if len(r.Empty) != 0 {
+		t.Errorf("expected no empty, got %v", r.Empty)
+	}
+	if len(r.Extra) != 0 {
+		t.Errorf("expected no extra, got %v", r.Extra)
+	}
+	if len(r.Undeclared) != 0 {
+		t.Errorf("expected no undeclared, got %+v", r.Undeclared)
+	}
+	if len(r.Ignored) != 4 {
+		t.Errorf("expected 4 suppressed keys, got %v", r.Ignored)
+	}
+}
+
+func TestCheck_IgnoreGlobPatterns(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env.example", "DB_HOST=\n")
+	writeFile(t, dir, ".env", "DB_HOST=x\nAWS_REGION=1\nAWS_KEY=2\nMY_SECRET=3\nPORT=4\nKEEP_ME=5\n")
+
+	opts := Options{Ignore: []string{"AWS_*", "*_SECRET", "P?RT"}}
+	r, err := Check(filepath.Join(dir, ".env.example"), filepath.Join(dir, ".env"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Extra) != 1 || r.Extra[0] != "KEEP_ME" {
+		t.Errorf("expected only KEEP_ME extra, got %v", r.Extra)
+	}
+}
+
+func TestCheck_IgnoreInvalidPatternReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env.example", "DB_HOST=\n")
+	writeFile(t, dir, ".env", "DB_HOST=x\n")
+
+	_, err := Check(
+		filepath.Join(dir, ".env.example"),
+		filepath.Join(dir, ".env"),
+		Options{Ignore: []string{"AWS_["}},
+	)
+	if err == nil {
+		t.Fatal("expected error for malformed ignore pattern, got nil")
+	}
+	if !strings.Contains(err.Error(), "AWS_[") {
+		t.Errorf("expected the bad pattern in the error message, got: %v", err)
+	}
+}
+
+func TestCheck_IgnoreNonMatchingPatternChangesNothing(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env.example", "DB_HOST=\nAPI_KEY=\n")
+	writeFile(t, dir, ".env", "DB_HOST=x\n")
+
+	opts := Options{Ignore: []string{"NOPE_*"}}
+	r, err := Check(filepath.Join(dir, ".env.example"), filepath.Join(dir, ".env"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Missing) != 1 || r.Missing[0] != "API_KEY" {
+		t.Errorf("expected API_KEY still missing, got %v", r.Missing)
+	}
+	if len(r.Ignored) != 0 {
+		t.Errorf("expected nothing suppressed, got %v", r.Ignored)
+	}
+}
+
+func TestCheck_IgnoreDoesNotCountKeysThatWereNeverReported(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env.example", "DB_HOST=\n")
+	writeFile(t, dir, ".env", "DB_HOST=localhost\n")
+
+	opts := Options{Ignore: []string{"DB_HOST"}}
+	r, err := Check(filepath.Join(dir, ".env.example"), filepath.Join(dir, ".env"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Ignored) != 0 {
+		t.Errorf("a healthy key should not be counted as suppressed, got %v", r.Ignored)
 	}
 }
 
