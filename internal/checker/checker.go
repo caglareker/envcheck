@@ -2,7 +2,9 @@ package checker
 
 import (
 	"bufio"
+	"fmt"
 	"os"
+	"path"
 	"sort"
 	"strings"
 
@@ -19,6 +21,9 @@ type Result struct {
 	Extra      []string
 	Empty      []string
 	Undeclared []UndeclaredKey
+	// Ignored lists keys that matched an --ignore pattern and were therefore
+	// suppressed from one of the categories above.
+	Ignored []string
 }
 
 // UndeclaredKey is a key referenced in source code but missing from the template.
@@ -30,9 +35,16 @@ type UndeclaredKey struct {
 type Options struct {
 	RequireValues bool
 	ScanPath      string
+	// Ignore holds path.Match glob patterns; matching keys are never reported.
+	Ignore []string
 }
 
 func Check(templatePath, actualPath string, opts Options) (*Result, error) {
+	ignore, err := newIgnoreMatcher(opts.Ignore)
+	if err != nil {
+		return nil, err
+	}
+
 	required, err := readEntries(templatePath)
 	if err != nil {
 		return nil, err
@@ -87,7 +99,74 @@ func Check(templatePath, actualPath string, opts Options) (*Result, error) {
 		}
 	}
 
+	ignore.apply(r)
+
 	return r, nil
+}
+
+// ignoreMatcher filters keys against a set of path.Match glob patterns.
+type ignoreMatcher struct {
+	patterns []string
+}
+
+func newIgnoreMatcher(patterns []string) (*ignoreMatcher, error) {
+	for _, p := range patterns {
+		// path.Match reports a malformed pattern regardless of the subject,
+		// so an empty subject is enough to validate up front.
+		if _, err := path.Match(p, ""); err != nil {
+			return nil, fmt.Errorf("invalid --ignore pattern %q: %w", p, err)
+		}
+	}
+	return &ignoreMatcher{patterns: patterns}, nil
+}
+
+func (m *ignoreMatcher) match(key string) bool {
+	for _, p := range m.patterns {
+		if ok, _ := path.Match(p, key); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// apply strips ignored keys from every reported category and records which
+// keys were actually suppressed, so a key that was never going to be reported
+// is not counted.
+func (m *ignoreMatcher) apply(r *Result) {
+	if len(m.patterns) == 0 {
+		return
+	}
+
+	suppressed := make(map[string]struct{})
+	filter := func(keys []string) []string {
+		var kept []string
+		for _, k := range keys {
+			if m.match(k) {
+				suppressed[k] = struct{}{}
+				continue
+			}
+			kept = append(kept, k)
+		}
+		return kept
+	}
+	r.Missing = filter(r.Missing)
+	r.Extra = filter(r.Extra)
+	r.Empty = filter(r.Empty)
+
+	var undeclared []UndeclaredKey
+	for _, u := range r.Undeclared {
+		if m.match(u.Key) {
+			suppressed[u.Key] = struct{}{}
+			continue
+		}
+		undeclared = append(undeclared, u)
+	}
+	r.Undeclared = undeclared
+
+	for k := range suppressed {
+		r.Ignored = append(r.Ignored, k)
+	}
+	sort.Strings(r.Ignored)
 }
 
 func readEntries(path string) ([]Entry, error) {

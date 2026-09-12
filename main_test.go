@@ -294,3 +294,129 @@ func mustWrite(t *testing.T, dir, name, content string) {
 		t.Fatal(err)
 	}
 }
+
+func TestStringList_SetSplitsCommasAndTrimsBlanks(t *testing.T) {
+	var got stringList
+	if err := got.Set("PATH, HOME ,,"); err != nil {
+		t.Fatal(err)
+	}
+	if err := got.Set("AWS_*"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"PATH", "HOME", "AWS_*"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+	if got.String() != "PATH,HOME,AWS_*" {
+		t.Errorf("unexpected String(): %q", got.String())
+	}
+}
+
+func TestPrintText_IgnoredCountLine(t *testing.T) {
+	var buf bytes.Buffer
+	printText(&buf, &checker.Result{Ignored: []string{"PATH", "HOME"}}, ".env.example", ".env", false, false, "")
+	if !strings.Contains(buf.String(), "ignored 2 key(s) via --ignore") {
+		t.Errorf("expected ignored count line, got: %s", buf.String())
+	}
+}
+
+func TestPrintText_NoIgnoredLineWhenNothingSuppressed(t *testing.T) {
+	var buf bytes.Buffer
+	printText(&buf, &checker.Result{}, ".env.example", ".env", false, false, "")
+	if strings.Contains(buf.String(), "--ignore") {
+		t.Errorf("did not expect an ignore line, got: %s", buf.String())
+	}
+}
+
+func TestRun_IgnoredMissingKeyExitsZeroWithCI(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, dir, ".env.example", "DB_HOST=\nLEGACY_TOKEN=\n")
+	mustWrite(t, dir, ".env", "DB_HOST=localhost\n")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"--template", filepath.Join(dir, ".env.example"),
+		"--actual", filepath.Join(dir, ".env"),
+		"--ci",
+		"--ignore", "LEGACY_TOKEN",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit 0 when the only missing key is ignored, got %d (stdout=%s)", code, stdout.String())
+	}
+	if strings.Contains(stdout.String(), "LEGACY_TOKEN") {
+		t.Errorf("ignored key should not be reported, got: %s", stdout.String())
+	}
+}
+
+func TestRun_IgnoreRepeatedFlagMatchesCommaList(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, dir, ".env.example", "DB_HOST=\nA_KEY=\nB_KEY=\n")
+	mustWrite(t, dir, ".env", "DB_HOST=localhost\n")
+	base := []string{
+		"--template", filepath.Join(dir, ".env.example"),
+		"--actual", filepath.Join(dir, ".env"),
+		"--ci",
+	}
+
+	var repeatedOut, commaOut bytes.Buffer
+	var stderr bytes.Buffer
+	repeated := run(append(append([]string{}, base...), "--ignore", "A_KEY", "--ignore", "B_KEY"), &repeatedOut, &stderr)
+	comma := run(append(append([]string{}, base...), "--ignore", "A_KEY,B_KEY"), &commaOut, &stderr)
+
+	if repeated != 0 || comma != 0 {
+		t.Errorf("expected both forms to exit 0, got repeated=%d comma=%d", repeated, comma)
+	}
+	if repeatedOut.String() != commaOut.String() {
+		t.Errorf("repeated and comma forms differ:\n repeated=%q\n comma=%q", repeatedOut.String(), commaOut.String())
+	}
+}
+
+func TestRun_IgnoreOnlySuppressesMatchingKeys(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, dir, ".env.example", "AWS_REGION=\nAWS_KEY=\nSTRIPE_KEY=\n")
+	mustWrite(t, dir, ".env", "")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"--template", filepath.Join(dir, ".env.example"),
+		"--actual", filepath.Join(dir, ".env"),
+		"--ci",
+		"--ignore", "AWS_*",
+	}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Errorf("expected exit 1, STRIPE_KEY is still missing, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), "STRIPE_KEY") {
+		t.Errorf("expected STRIPE_KEY reported, got: %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "AWS_") {
+		t.Errorf("AWS_* keys should be suppressed, got: %s", stdout.String())
+	}
+}
+
+func TestRun_InvalidIgnorePatternExitsTwo(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, dir, ".env.example", "DB_HOST=\n")
+	mustWrite(t, dir, ".env", "DB_HOST=x\n")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"--template", filepath.Join(dir, ".env.example"),
+		"--actual", filepath.Join(dir, ".env"),
+		"--ignore", "AWS_[",
+	}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Errorf("expected exit 2 on malformed ignore pattern, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "invalid --ignore pattern") {
+		t.Errorf("expected a helpful stderr message, got: %s", stderr.String())
+	}
+}
